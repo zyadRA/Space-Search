@@ -93,10 +93,24 @@ class SpaceEnvironment:
             }
             self.planets.append(planet)
             occupied_positions.add(position)
-            self.grid[position]
+            self.grid[position] = PLANET
         
         # generating meteors
-        
+        for i in range(num_meteors):
+            position = self.get_ranom_empty_position(occupied_positions)
+            # random movements for 5 timesteps
+            directions= ["UP", "DOWN", "LEFT", "RIGHT"]
+            pattern = [random.choice(directions) for j in range(5)]
+            meteor= {
+                "type":METEOR,
+                "position":position,
+                "damage":random.randint(5,15),
+                "movement_pattern": pattern,
+                "pattern_i":0
+            }
+            self.meteors.append(meteor)
+            occupied_positions.add(position)
+            self.grid
         return
     
     def get_ranom_empty_position(self, occupied_positions):
