@@ -110,7 +110,44 @@ class SpaceEnvironment:
             }
             self.meteors.append(meteor)
             occupied_positions.add(position)
-            self.grid
+            self.grid[position] = METEOR
+
+        # generating nebulas
+        for i in range(num_nebulas):
+            position = self.get_ranom_empty_position(occupied_positions)
+            nebula = {
+                "type":NEBULA,
+                "position":position,
+                "sensor_reduction":1
+            }
+            self.nebulas.append(nebula)
+            occupied_positions.add(position)
+            self.grid[position] = NEBULA
+        
+        # generating radiation zone
+        for i in range(num_radiation_zones):
+            position = self.get_ranom_empty_position(occupied_positions)
+            radiation_zone = {
+                "type":RADIATION_ZONE,
+                "position":position,
+                "damage":2
+            }
+            self.radiation_zones.append(radiation_zone)
+            occupied_positions.add(position)
+            self.grid[position] = RADIATION_ZONE
+        
+        # generating space stations
+        for i in range(num_space_stations):
+            position = self.get_ranom_empty_position(occupied_positions)
+            space_station = {
+                "type":SPACE_STATION,
+                "position":position,
+                "refuel_amount":70
+            }
+            self.space_stations.append(space_station)
+            occupied_positions.add(position)
+            self.grid[position] = SPACE_STATION
+        
         return
     
     def get_ranom_empty_position(self, occupied_positions):
