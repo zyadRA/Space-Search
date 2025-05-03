@@ -1,6 +1,13 @@
 import math
 import numpy as np
 import random
+# Imoprtant for agent code!!
+# agent_state is the dic {"position":x,"fuel":x,"health":x, "collected_resources":x, "covered_map_percentage":x,"explored_cells":x }
+# position is tuple row and col (1,2)
+# both health and fuel are int
+# collected_resources is the dic {"water":x, "minerals": x, "oxygen": x} where the values are int
+# covered_map_percentage is float
+# explored_cells is set of every explored cell (1,2)
 
 # constants for entities to be mapped on the grid
 EMPTY = 0
@@ -12,6 +19,7 @@ NEBULA = 5
 RADIATION_ZONE = 6
 UNEXPLORED = 7
 END = 8
+
 class SpaceEnvironment:
     def __init__(self, grid=(20,20)):
         self.grid =grid
@@ -33,7 +41,6 @@ class SpaceEnvironment:
         self.resource_goals = {}
         self.mapping_goal_percentage = 0.0
 
-        pass
 
     def intialize_env(self, agent_position=None,
                       end_position=None,
@@ -55,7 +62,7 @@ class SpaceEnvironment:
 
         # goals
         self.mapping_goal_percentage = mapping_goal_percentage
-        self.resource_goals = resource_goals or {"Water":10, "Minerals": 15, "Oxygen": 5}
+        self.resource_goals = resource_goals or {"water":10, "minerals": 15, "oxygen": 5}
 
         # track occupied positions
         occupied_positions = set()
@@ -67,6 +74,7 @@ class SpaceEnvironment:
             start_row = random.randint(0, self.grid[0]-1)
             start_col = random.randint(0, self.grid[1]-1)
             self.starting_position = (start_row, start_col)
+
         # add agent to grid
         occupied_positions.add(self.starting_position)
         self.grid[self.starting_position] = AGENT
@@ -76,13 +84,14 @@ class SpaceEnvironment:
             self.end_position = end_position
         else:
             self.end_position = self.get_ranom_empty_position(occupied_positions)
+        
         # add end position to grid
         occupied_positions.add(self.end_position)
         self.grid[self.end_position] = END
 
         # Generating entities
         # generating planets
-        resources = ["Water", "Oxygen", "Minerals"]
+        resources = ["water", "oxygen", "minerals"]
         for i in range(num_planets):
             position = self.get_ranom_empty_position(occupied_positions)
             planet = {
@@ -157,12 +166,155 @@ class SpaceEnvironment:
             if (r,c) not in occupied_positions:
                 return (r,c)
 
+    # ACTION FUNCTIONS
+
+    # get allowable actions
+    def actions(self, agent_state):
+        agent_position = agent_state["position"]
+
+        # scan is always allowed
+        allowed_actions=["SCAN"]
+
+        # if health or fuel are 0
+        if agent_state["health"] <= 0: return allowed_actions
+        if agent_state["fuel"] <= 0 and agent_position != PLANET:return allowed_actions
+        if agent_state["fuel"] <= 0 and agent_position == PLANET:
+            allowed_actions.append("DOCK")
+            return allowed_actions
+        
+        # add allowed moves
+        for direction in ["UP", "DOWN", "LEFT", "RIGHT"]:
+            new_position = self.get_new_position(agent_position, direction)
+            if self.is_valid_position(new_position):
+                allowed_actions.append(direction)
+
+        # check if collect is allowed
+        if self.grid[agent_position] == PLANET:
+            allowed_actions.append("COLLECT")
+
+        # check if dock id allowed
+        if self.grid[agent_position] == SPACE_STATION:
+            allowed_actions.append("DOCK")
+
+        return allowed_actions
+    
+    def get_new_position(self, position, direction):
+        row, col = position
+        if direction == "UP":
+            return (row - 1, col)
+        elif direction == "DOWN":
+            return (row + 1, col)
+        elif direction == "LEFT":
+            return (row, col - 1)
+        elif direction == "RIGHT":
+            return (row, col + 1)
+        return position
+
+    def is_valid_position(self, position):
+        row, col = position
+        return 0 <= row < self.grid.shape[0] and 0 <= col < self.grid.shape[1]
+    
+    # result function
+    # will return the dic {"agent_state":agent_state, "percepts":percepts}
+    # agent_state is defined above
+    # percepts is a list of dictionaries for each entity in every cell {"position": pos, "entity_type": entity_type}
+    # entity_type is int from the entity constants defined above 
+    # if action is SCAN percepts will store scan result else it will be empty
+    def do_action(self, agent_state, action):
+        # check if action is allowed
+        if action not in self.actions(agent_state): 
+            return agent_state
+        
+        agent_health = agent_state["health"]
+        agent_position=agent_state["position"]
+        agent_fuel = agent_state["fuel"]
+        percepts = []
+
+        # if action is move
+        if action in ["UP", "DOWN", "LEFT", "RIGHT"]:
+            # empty current position
+            self.grid[agent_position] = EMPTY
+            # move to new position
+            agent_position = self.get_new_position(agent_position, action)
+            # update grid with new agent position
+            self.grid[agent_position] = AGENT
+            # consume fuel
+            agent_fuel -=1
+            
+            # check for effects of new position
+
+            # meteors 
+            for meteor in self.meteors:
+                if meteor["position"] == agent_position:
+                    agent_health -= meteor["damage"]
+            # radiation zones
+            for radiation_zone in self.radiation_zones:
+                if radiation_zone["position"] == agent_position:
+                    agent_health -= radiation_zone["damage"]
+
+        elif action == "SCAN":
+            sensor_range = 3            
+
+            # check if in nebula
+            for nebula in self.nebulas:
+                if agent_position == nebula["position"]:
+                    sensor_range -= nebula["sensor_reduction"]
+            
+            # check if scan is in bounds
+            row, col = agent_position
+            min_row = max(0, row - sensor_range)
+            max_row = min(self.grid.shape[0] - 1, row + sensor_range)
+            min_col = max(0, col - sensor_range)
+            max_col = min(self.grid.shape[1] - 1, col + sensor_range)
+            # 
+            for r in range(min_row, max_row + 1):
+                for c in range(min_col, max_col + 1):
+                    pos = (r, c)
+                    entity_type = self.grid[pos]
+
+                    # add scanned cells
+                    percept = {"position": pos, "entity_type": entity_type}
+                    percepts.append(percept)
+                    
+                    # mark cell as explored
+                    agent_state["explored_cells"].add(pos)
+            # update covered map percentage
+            total_cells = self.grid.shape[0] * self.grid.shape[1]
+            agent_state["covered_map_percentage"] = (len(agent_state["explored_cells"]) / total_cells) * 100
+
+        elif action == "COLLECT":
+            planet=None
+            # find which planet agent is on
+            for p in self.planets:
+                if p["position"] == agent_position:
+                    planet = p
+                    break
+            
+            # collect resource
+            agent_state["collected_resources"][planet["resource_type"]] += planet["resource_amount"]
+            planet["resource_amount"] = 0
+
+        elif action == "DOCK":
+            
+            station = None
+            # find which station agent is on
+            for s in self.space_stations:
+                if s["position"] == agent_position:
+                    station = s
+            # refuel
+            agent_fuel += station["refuel_amount"]
+            if agent_fuel > 100: 
+                agent_fuel = 100
+            
+        agent_state["health"] = agent_health
+        agent_state["position"] = agent_position
+        agent_state["fuel"] = agent_fuel
+
+        return {"agent_state":agent_state, "percepts":percepts}
     def update(self):
         #move everything and add timestep
         pass
     def sense(self):
         #sense environement
         pass
-    def actions(self):
-        #return allowable actions
-        pass
+    
