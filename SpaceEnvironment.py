@@ -22,8 +22,8 @@ END = 8
 
 class SpaceEnvironment:
     def __init__(self, grid=(20,20)):
-        self.grid =grid
         self.grid = np.full(grid, 0)
+        self.occupied_positions = set()
 
         # entity containers
         self.planets = []
@@ -52,7 +52,7 @@ class SpaceEnvironment:
                       mapping_goal_percentage=70.0,
                       resource_goals=None):
         # reset env
-        self.grid = np.full(self.grid_size, EMPTY, dtype=int)
+        self.grid = np.full(self.grid.shape, EMPTY, dtype=int)
         self.planets = []
         self.meteors = []
         self.space_stations = []
@@ -64,8 +64,8 @@ class SpaceEnvironment:
         self.mapping_goal_percentage = mapping_goal_percentage
         self.resource_goals = resource_goals or {"water":10, "minerals": 15, "oxygen": 5}
 
-        # track occupied positions
-        occupied_positions = set()
+        # reset occupied positions
+        self.occupied_positions = set()
 
         # agent position 
         if agent_position:
@@ -76,24 +76,24 @@ class SpaceEnvironment:
             self.starting_position = (start_row, start_col)
 
         # add agent to grid
-        occupied_positions.add(self.starting_position)
+        self.occupied_positions.add(self.starting_position)
         self.grid[self.starting_position] = AGENT
 
         # end position
         if end_position:
             self.end_position = end_position
         else:
-            self.end_position = self.get_ranom_empty_position(occupied_positions)
+            self.end_position = self.get_ranom_empty_position()
         
         # add end position to grid
-        occupied_positions.add(self.end_position)
+        self.occupied_positions.add(self.end_position)
         self.grid[self.end_position] = END
 
         # Generating entities
         # generating planets
         resources = ["water", "oxygen", "minerals"]
         for i in range(num_planets):
-            position = self.get_ranom_empty_position(occupied_positions)
+            position = self.get_ranom_empty_position()
             planet = {
                 "type":PLANET,
                 "position":position,
@@ -101,12 +101,12 @@ class SpaceEnvironment:
                 "resource_amount":random.randint(5,20)
             }
             self.planets.append(planet)
-            occupied_positions.add(position)
+            self.occupied_positions.add(position)
             self.grid[position] = PLANET
         
         # generating meteors
         for i in range(num_meteors):
-            position = self.get_ranom_empty_position(occupied_positions)
+            position = self.get_ranom_empty_position()
             # random movements for 5 timesteps
             directions= ["UP", "DOWN", "LEFT", "RIGHT"]
             pattern = [random.choice(directions) for j in range(5)]
@@ -118,52 +118,52 @@ class SpaceEnvironment:
                 "pattern_i":0
             }
             self.meteors.append(meteor)
-            occupied_positions.add(position)
+            self.occupied_positions.add(position)
             self.grid[position] = METEOR
 
         # generating nebulas
         for i in range(num_nebulas):
-            position = self.get_ranom_empty_position(occupied_positions)
+            position = self.get_ranom_empty_position()
             nebula = {
                 "type":NEBULA,
                 "position":position,
                 "sensor_reduction":1
             }
             self.nebulas.append(nebula)
-            occupied_positions.add(position)
+            self.occupied_positions.add(position)
             self.grid[position] = NEBULA
         
         # generating radiation zone
         for i in range(num_radiation_zones):
-            position = self.get_ranom_empty_position(occupied_positions)
+            position = self.get_ranom_empty_position()
             radiation_zone = {
                 "type":RADIATION_ZONE,
                 "position":position,
                 "damage":2
             }
             self.radiation_zones.append(radiation_zone)
-            occupied_positions.add(position)
+            self.occupied_positions.add(position)
             self.grid[position] = RADIATION_ZONE
         
         # generating space stations
         for i in range(num_space_stations):
-            position = self.get_ranom_empty_position(occupied_positions)
+            position = self.get_ranom_empty_position()
             space_station = {
                 "type":SPACE_STATION,
                 "position":position,
                 "refuel_amount":70
             }
             self.space_stations.append(space_station)
-            occupied_positions.add(position)
+            self.occupied_positions.add(position)
             self.grid[position] = SPACE_STATION
         
         return
     
-    def get_ranom_empty_position(self, occupied_positions):
+    def get_ranom_empty_position(self):
         while True:
             r = random.randint(0, self.grid[0]-1)
             c = random.randint(0, self.grid[1]-1)
-            if (r,c) not in occupied_positions:
+            if (r,c) not in self.occupied_positions:
                 return (r,c)
 
     # ACTION FUNCTIONS
@@ -233,11 +233,13 @@ class SpaceEnvironment:
         # if action is move
         if action in ["UP", "DOWN", "LEFT", "RIGHT"]:
             # empty current position
+            self.occupied_positions.remove(agent_position)
             self.grid[agent_position] = EMPTY
             # move to new position
             agent_position = self.get_new_position(agent_position, action)
             # update grid with new agent position
             self.grid[agent_position] = AGENT
+            self.occupied_positions.add(agent_position)
             # consume fuel
             agent_fuel -=1
             
@@ -311,10 +313,67 @@ class SpaceEnvironment:
         agent_state["fuel"] = agent_fuel
 
         return {"agent_state":agent_state, "percepts":percepts}
-    def update(self):
-        #move everything and add timestep
-        pass
-    def sense(self):
-        #sense environement
-        pass
     
+    # UPDATE ENVIRONMENT FUNCTIONS
+
+    def update_env(self, agent_state):
+        self.timestep +=1
+        # update env
+        self.move_meteors(agent_state)
+        self.add_nebula()
+
+    def move_meteors(self, agent_state):
+        agent_position = agent_state["position"]
+        directions= ["UP", "DOWN", "LEFT", "RIGHT"]
+        for meteor in self.meteors:
+            # random direction
+            direction = random.choice(directions)
+            new_pos = self.get_new_position(meteor["position"], direction)
+            
+            if self.is_valid_position(new_pos) and new_pos not in self.occupied_positions:
+                # make old position emtpy
+                self.occupied_positions.remove(meteor["position"])
+                self.grid[meteor["position"]] = EMPTY
+                # update position
+                meteor["position"] = new_pos
+                self.occupied_positions.add(new_pos)
+
+                # check collision
+                if new_pos == agent_position:
+                    agent_state["health"] -= meteor["damage"]
+    
+    def add_nebula(self):
+        # 2% chance to generate a nebula
+        if random.random() < 0.02:
+            position = self.get_ranom_empty_position()
+            nebula = {
+                "type":NEBULA,
+                "position":position,
+                "sensor_reduction":1
+            }
+            self.grid[position] = NEBULA
+            self.nebulas.append(nebula)
+            self.occupied_positions.add(position)
+
+    # GOAL FUNCTION
+    # returns dic {is_game_over:true, is_map_covered:true, is_resources_met:false}
+    def is_game_over(self, agent_state):
+        is_over = False
+        is_map_covered = False
+        is_resources_met = True
+
+        # is game over ?
+        if agent_state["health"] <= 0: is_over = True
+        if agent_state["fuel"] <= 0 and self.grid[agent_state["position"]] != SPACE_STATION: is_over = True
+        if agent_state["position"] == self.end_position: is_over = True
+
+        # is map covered?
+        if agent_state["covered_map_percentage"] >= self.mapping_goal_percentage:
+            is_map_covered = True
+
+        # is resources goal met?
+        for resource_type, goal_amount in self.resource_goals.items():
+            if agent_state["collected_resources"][resource_type] < goal_amount:
+                is_resources_met = False
+        
+        return {"is_game_over":is_over,"is_map_covered":is_map_covered, "is_resources_met": is_resources_met}
