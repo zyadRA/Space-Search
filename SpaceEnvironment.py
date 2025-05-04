@@ -190,12 +190,14 @@ class SpaceEnvironment:
                 allowed_actions.append(direction)
 
         # check if collect is allowed
-        if self.grid[agent_position] == PLANET:
-            allowed_actions.append("COLLECT")
+        for planet in self.planets:    
+            if agent_position == planet["position"]:
+                allowed_actions.append("COLLECT")
 
         # check if dock id allowed
-        if self.grid[agent_position] == SPACE_STATION:
-            allowed_actions.append("DOCK")
+        for station in self.space_stations:    
+            if agent_position == station["position"]:
+                allowed_actions.append("DOCK")
 
         return allowed_actions
     
@@ -244,6 +246,11 @@ class SpaceEnvironment:
             # update grid with new agent position
             self.grid[agent_position] = AGENT
             self.occupied_positions.add(agent_position)
+
+            agent_state["explored_cells"].add(agent_position)
+            total_cells = self.grid.shape[0] * self.grid.shape[1]
+            agent_state["covered_map_percentage"] = (len(agent_state["explored_cells"]) / total_cells) * 100
+
             # consume fuel
             agent_fuel -=1
             
