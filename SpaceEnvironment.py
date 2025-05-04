@@ -22,6 +22,7 @@ END = 8
 
 class SpaceEnvironment:
     def __init__(self, grid=(20,20)):
+        self.grid_size = grid  
         self.grid = np.full(grid, 0)
         self.occupied_positions = set()
 
@@ -71,8 +72,8 @@ class SpaceEnvironment:
         if agent_position:
             self.starting_position = agent_position
         else:
-            start_row = random.randint(0, self.grid[0]-1)
-            start_col = random.randint(0, self.grid[1]-1)
+            start_row = random.randint(0, self.grid_size[0]-1)
+            start_col = random.randint(0, self.grid_size[1]-1)
             self.starting_position = (start_row, start_col)
 
         # add agent to grid
@@ -161,8 +162,8 @@ class SpaceEnvironment:
     
     def get_ranom_empty_position(self):
         while True:
-            r = random.randint(0, self.grid[0]-1)
-            c = random.randint(0, self.grid[1]-1)
+            r = random.randint(0, self.grid_size[0]-1)
+            c = random.randint(0, self.grid_size[1]-1)
             if (r,c) not in self.occupied_positions:
                 return (r,c)
 
@@ -212,7 +213,7 @@ class SpaceEnvironment:
 
     def is_valid_position(self, position):
         row, col = position
-        return 0 <= row < self.grid.shape[0] and 0 <= col < self.grid.shape[1]
+        return 0 <= row < self.grid_size[0] and 0 <= col < self.grid_size[1]
     
     # result function
     # will return the dic {"agent_state":agent_state, "percepts":percepts}
@@ -221,19 +222,22 @@ class SpaceEnvironment:
     # entity_type is int from the entity constants defined above 
     # if action is SCAN percepts will store scan result else it will be empty
     def do_action(self, agent_state, action):
+    
+        percepts = []
+
         # check if action is allowed
         if action not in self.actions(agent_state): 
-            return agent_state
+            return {"agent_state":agent_state, "percepts":percepts}
         
         agent_health = agent_state["health"]
         agent_position=agent_state["position"]
         agent_fuel = agent_state["fuel"]
-        percepts = []
 
         # if action is move
         if action in ["UP", "DOWN", "LEFT", "RIGHT"]:
             # empty current position
-            self.occupied_positions.remove(agent_position)
+            if agent_position in self.occupied_positions:
+                self.occupied_positions.remove(agent_position)
             self.grid[agent_position] = EMPTY
             # move to new position
             agent_position = self.get_new_position(agent_position, action)
@@ -292,9 +296,10 @@ class SpaceEnvironment:
                     planet = p
                     break
             
-            # collect resource
-            agent_state["collected_resources"][planet["resource_type"]] += planet["resource_amount"]
-            planet["resource_amount"] = 0
+            if planet is not None:
+                # collect resource
+                agent_state["collected_resources"][planet["resource_type"]] += planet["resource_amount"]
+                planet["resource_amount"] = 0
 
         elif action == "DOCK":
             
@@ -303,11 +308,12 @@ class SpaceEnvironment:
             for s in self.space_stations:
                 if s["position"] == agent_position:
                     station = s
-            # refuel
-            agent_fuel += station["refuel_amount"]
-            if agent_fuel > 100: 
-                agent_fuel = 100
-            
+            if station is not None:
+                # refuel
+                agent_fuel += station["refuel_amount"]
+                if agent_fuel > 100: 
+                    agent_fuel = 100
+                
         agent_state["health"] = agent_health
         agent_state["position"] = agent_position
         agent_state["fuel"] = agent_fuel
@@ -330,9 +336,10 @@ class SpaceEnvironment:
             direction = random.choice(directions)
             new_pos = self.get_new_position(meteor["position"], direction)
             
-            if self.is_valid_position(new_pos) and new_pos not in self.occupied_positions:
+            if self.is_valid_position(new_pos) and (new_pos not in self.occupied_positions or new_pos == agent_position):
                 # make old position emtpy
-                self.occupied_positions.remove(meteor["position"])
+                if meteor["position"] in self.occupied_positions:
+                    self.occupied_positions.remove(meteor["position"])
                 self.grid[meteor["position"]] = EMPTY
                 # update position
                 meteor["position"] = new_pos
