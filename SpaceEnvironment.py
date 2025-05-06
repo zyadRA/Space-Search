@@ -43,7 +43,7 @@ class SpaceEnvironment:
         self.mapping_goal_percentage = 0.0
 
 
-    def intialize_env(self, agent_position=None,
+    def initialize_env(self, agent_position=None,
                       end_position=None,
                       num_planets=4,
                       num_meteors=5,

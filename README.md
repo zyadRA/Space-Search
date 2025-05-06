@@ -1,1 +1,0 @@
-# Space Exploration AI Project
