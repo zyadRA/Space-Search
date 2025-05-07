@@ -60,18 +60,11 @@ class AutoSpaceGUI:
         # Initialize the intelligent agent
         initial_agent_info = {
             'resource_goals': self.env.resource_goals
-        }
-        
-        # Collect dangerous entity positions for monster_coords
-        monster_coords = set()
-        for meteor in self.env.meteors:
-            monster_coords.add(meteor["position"])
-        for radiation in self.env.radiation_zones:
-            monster_coords.add(radiation["position"])
+        }        
             
         # Create the agent
         self.agent = Agent(initial_agent_info, self.env.grid_size[0], 
-                          monster_coords=monster_coords, location=self.env.starting_position)
+                         location=self.env.starting_position)
                           
         # Do an initial scan to build the agent's knowledge
         result = self.env.do_action(self.agent_state, "SCAN")
@@ -308,12 +301,6 @@ class AutoSpaceGUI:
         if percepts:
             self.agent.sense(self.agent_state["position"], self.env)
             
-        # Update monster_coords with current meteor and radiation zone positions
-        self.agent.monster_coords = set()
-        for meteor in self.env.meteors:
-            self.agent.monster_coords.add(meteor["position"])
-        for radiation in self.env.radiation_zones:
-            self.agent.monster_coords.add(radiation["position"])
         
         self.env.update_env(self.agent_state)
         self.timesteps += 1
